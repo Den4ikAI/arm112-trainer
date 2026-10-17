@@ -24,6 +24,7 @@ export const App = () => {
   const { user, checking, restore } = useSession();
   const loadCatalog = useCatalog((st) => st.load);
   const loadStand = useStand((st) => st.load);
+  const standLoaded = useStand((st) => st.loaded);
 
   // Сохранённый токен проверяем один раз при запуске: перезагрузка
   // страницы посреди занятия не должна выкидывать на экран входа
@@ -36,7 +37,10 @@ export const App = () => {
   // Справочники нужны всем экранам, кроме входа
   useEffect(() => { if (user) void loadCatalog(); }, [user, loadCatalog]);
 
-  if (checking) return <div data-testid="app-loading" />;
+  // Свёрнут ли 112, экраны решают при первом показе (вкладка, режим
+  // занятия): до ответа о стенде их не рисуем, иначе после перезагрузки
+  // страница открывалась как при свёрнутом 112
+  if (checking || !standLoaded) return <div data-testid="app-loading" />;
 
   return (
     <Routes>
