@@ -111,6 +111,8 @@ use utoipa::{
         crate::api::dds_incidents::approve,
         crate::api::dds_incidents::remove,
         crate::api::dds_incidents::create_from_prompt,
+        crate::api::dds_incidents::generate,
+        crate::api::dds_incidents::practice,
         crate::api::lessons::list,
         crate::api::lessons::create,
         crate::api::lessons::one,
@@ -146,6 +148,7 @@ use utoipa::{
         crate::api::monitor::group_analytics,
         crate::api::monitor::student_analytics,
         crate::api::health::health,
+        crate::api::stand::stand,
     ),
     modifiers(&BearerAuth),
 )]

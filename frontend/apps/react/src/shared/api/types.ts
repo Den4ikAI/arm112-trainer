@@ -313,6 +313,8 @@ export interface GroupBrief {
   title: string;
   teacherFio: string;
   members: number;
+  /** Из них диспетчеров ДДС */
+  dispatchers: number;
 }
 
 export interface Problem {
@@ -426,8 +428,36 @@ export interface Incident {
   manualServices: string[];
   classifyReason: string | null;
   lessons: number;
+  /** Как собрано: вручную, моделью по описанию, системой целиком
+   *  (позиция классификатора + текст модели); у старых — null */
+  source: 'manual' | 'prompt' | 'ai' | null;
   createdAt: string;
   approvedAt: string | null;
+}
+
+/** Происшествие самостоятельной тренировки: уже в ленте диспетчера. */
+export interface Practice {
+  cardId: string;
+  number: string;
+  lessonId: string;
+}
+
+/** Учебная учётная запись демонстрационного стенда. */
+export interface DemoAccount {
+  login: string;
+  fio: string;
+  role: 'student' | 'teacher' | 'admin';
+  duty: 'dds' | 'op112' | null;
+  /** Краткое название службы диспетчера */
+  service: string | null;
+}
+
+/** Что экран входа знает о стенде до входа (`/api/stand`). */
+export interface Stand {
+  /** Рабочее место оператора 112 не свёрнуто */
+  op112: boolean;
+  /** Учётные записи демонстрационного стенда; null — стенд рабочий */
+  demo: { password: string; accounts: DemoAccount[] } | null;
 }
 
 export interface IncidentInput {

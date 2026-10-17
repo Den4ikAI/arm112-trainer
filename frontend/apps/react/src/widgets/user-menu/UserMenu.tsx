@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSession, roleTitle, dutyTitle } from '@/entities/session/model';
 import { useCatalog } from '@/entities/catalog/model';
+import { useStand } from '@/entities/stand/model';
 import s from './UserMenu.module.scss';
 
 /** Экраны преподавателя: путь, подпись, testid */
@@ -31,6 +32,8 @@ export const UserMenu = () => {
   const nav = useNavigate();
   const { pathname } = useLocation();
   const serviceShort = useCatalog((st) => st.serviceShort);
+  // Приём вызовов 112 свёрнут — в материале только происшествия ДДС
+  const op112 = useStand((st) => st.op112);
 
   if (!user) return null;
 
@@ -62,7 +65,9 @@ export const UserMenu = () => {
           {TEACHER_LINKS.map(([path, label, testid]) => (
             <button key={path} className={s.link} data-testid={testid}
                     aria-current={pathname === path ? 'page' : undefined}
-                    onClick={() => nav(path)}>{label}</button>
+                    onClick={() => nav(path)}>
+              {path === '/scenarios' && !op112 ? 'учебный материал' : label}
+            </button>
           ))}
         </>
       )}

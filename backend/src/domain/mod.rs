@@ -6,6 +6,7 @@ pub mod brigade;
 pub mod chief;
 pub mod card_status;
 pub mod classify;
+pub mod dds_gen;
 pub mod drill;
 pub mod fact_statements;
 pub mod forecast;

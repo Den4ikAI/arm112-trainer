@@ -14,6 +14,7 @@ import { LessonMonitorPage } from '@/pages/teacher/LessonMonitorPage';
 import { useSession, otherDuty, dutyTitle } from '@/entities/session/model';
 import { NotForDuty } from '@/shared/ui/NotForDuty';
 import { useCatalog } from '@/entities/catalog/model';
+import { useStand } from '@/entities/stand/model';
 
 /**
  * Маршруты повторяют пути боевой ПОВ-112 (/#!/incident/<номер>),
@@ -22,10 +23,15 @@ import { useCatalog } from '@/entities/catalog/model';
 export const App = () => {
   const { user, checking, restore } = useSession();
   const loadCatalog = useCatalog((st) => st.load);
+  const loadStand = useStand((st) => st.load);
 
   // Сохранённый токен проверяем один раз при запуске: перезагрузка
   // страницы посреди занятия не должна выкидывать на экран входа
   useEffect(() => { void restore(); }, [restore]);
+
+  // Сведения о стенде нужны уже экрану входа: учебные учётные записи
+  // и свёрнут ли приём вызовов 112
+  useEffect(() => { void loadStand(); }, [loadStand]);
 
   // Справочники нужны всем экранам, кроме входа
   useEffect(() => { if (user) void loadCatalog(); }, [user, loadCatalog]);

@@ -93,6 +93,16 @@ export const ddsIncidents = {
   remove: (id: string) => api.del<void>(`/api/dds-incidents/${id}`),
   fromPrompt: (title: string, prompt: string) =>
     api.post<import('./types').Incident>('/api/dds-incidents/from-prompt', { title, prompt }),
+  /** Собрать системой целиком для службы: признаки — классификатор, текст — модель */
+  generate: (serviceId: string) =>
+    api.post<import('./types').Incident>('/api/dds-incidents/generate', { serviceId }),
+  /** Самостоятельная тренировка диспетчера: происшествие от ИИ сразу в ленту */
+  practice: () => api.post<import('./types').Practice>('/api/dds-incidents/practice'),
+};
+
+/** Сведения о стенде для экрана входа — до входа, без токена. */
+export const stand = {
+  get: () => api.get<import('./types').Stand>('/api/stand'),
 };
 
 /**
