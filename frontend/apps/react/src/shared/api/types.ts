@@ -671,3 +671,61 @@ export interface AskFreeResult {
   unlocks: string[];
 }
 
+
+// ─── IP-телефон диспетчера ДДС ──────────────────────────────────────
+
+/** Параметры телефонии и свой внутренний номер. */
+export interface PhoneConfig {
+  /** Звонки идут через IP-телефон (параметр `ui.phone`). */
+  enabled: boolean;
+  /** Голос диспетчера сохраняется для записи разговора. */
+  record: boolean;
+  ringSec: number;
+  answerSec: number;
+  asr: boolean;
+  tts: boolean;
+  extension: string | null;
+}
+
+export type PhonePeer = 'brigade' | 'chief';
+
+export interface PhoneContact {
+  peer: PhonePeer;
+  title: string;
+  number: string;
+  available: boolean;
+  note: string | null;
+}
+
+export interface PhoneLine {
+  id: number;
+  who: 'dispatcher' | 'peer';
+  text: string;
+  at: string;
+  hasAudio: boolean;
+}
+
+export type PhoneOutcome = 'ringing' | 'talking' | 'ended' | 'missed' | 'declined';
+
+export interface PhoneCall {
+  id: string;
+  dispatcher: string;
+  serviceId: string;
+  peer: PhonePeer;
+  title: string;
+  direction: 'in' | 'out';
+  number: string;
+  outcome: PhoneOutcome;
+  startedAt: string;
+  answeredAt: string | null;
+  endedAt: string | null;
+  durationSec: number | null;
+  lines: PhoneLine[];
+  recording: boolean;
+}
+
+export interface PhoneView {
+  extension: string | null;
+  phonebook: PhoneContact[];
+  calls: PhoneCall[];
+}

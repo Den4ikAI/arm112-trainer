@@ -538,6 +538,34 @@ const rawRequest = async (path: string, init: RequestInit): Promise<Response> =>
 };
 
 /**
+ * IP-телефон диспетчера ДДС. Разговор ведут прежние эндпоинты бригады и
+ * начальника; здесь — вызовы, журнал и запись разговора.
+ */
+export const phone = {
+  config: () => api.get<import('./types').PhoneConfig>('/api/phone/config'),
+  view: (cardId: string, serviceId?: string) =>
+    api.get<import('./types').PhoneView>(`/api/cards/${cardId}/phone${serviceId
+      ? `?serviceId=${encodeURIComponent(serviceId)}` : ''}`),
+  dial: (cardId: string, peer: import('./types').PhonePeer, direction: 'in' | 'out') =>
+    api.post<import('./types').PhoneCall>(`/api/cards/${cardId}/phone/calls`, { peer, direction }),
+  answer: (callId: string) =>
+    api.post<import('./types').PhoneCall>(`/api/phone/calls/${callId}/answer`),
+  /** `declined` — сбросить звонящий вызов; без него — пропущен или окончен. */
+  end: (callId: string, outcome?: 'declined') =>
+    api.post<import('./types').PhoneCall>(`/api/phone/calls/${callId}/end`, outcome ? { outcome } : {}),
+  line: (callId: string, who: 'dispatcher' | 'peer', text: string) =>
+    api.post<{ id: number }>(`/api/phone/calls/${callId}/lines`, { who, text }),
+  /** Голос диспетчера к реплике — для записи разговора. */
+  lineAudio: async (callId: string, lineId: number, wav: Blob) => {
+    await rawRequest(`/api/phone/calls/${callId}/lines/${lineId}/audio`,
+      { method: 'PUT', headers: { 'Content-Type': 'audio/wav' }, body: wav });
+  },
+  /** Запись разговора, WAV. */
+  recording: async (callId: string) =>
+    (await rawRequest(`/api/phone/calls/${callId}/recording`, { method: 'GET' })).blob(),
+};
+
+/**
  * Голос. Не подключён — `status` честно говорит «нет», остальные
  * вызовы отвечают 503, и разговор идёт текстом.
  */

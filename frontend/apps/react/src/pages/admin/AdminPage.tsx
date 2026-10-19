@@ -7,6 +7,7 @@ import {
 import { useSession } from '@/entities/session/model';
 import { useCatalog } from '@/entities/catalog/model';
 import { useStand } from '@/entities/stand/model';
+import { usePhone } from '@/entities/phone/model';
 import { UserMenu } from '@/widgets/user-menu/UserMenu';
 import { DutyEditor } from '@/widgets/duty-editor/DutyEditor';
 import clsx from '@/shared/lib/clsx';
@@ -500,6 +501,8 @@ const SettingsTab = () => {
       setRows((list) => list.map((r) => (r.key === key ? saved : r)));
       // Свернуть или развернуть 112 — интерфейс перестраивается сразу
       if (key === 'ui.op112') void useStand.getState().load();
+      // Параметры телефона действуют со следующего открытия карточки
+      if (key === 'ui.phone' || key.startsWith('phone.')) void usePhone.getState().load();
       setNote((n) => ({ ...n, [key]: 'Сохранено' }));
     } catch (e) {
       setNote((n) => ({ ...n, [key]: e instanceof ApiError ? e.message : 'Не сохранилось' }));

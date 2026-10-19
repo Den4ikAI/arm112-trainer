@@ -13,6 +13,7 @@ pub mod forecast;
 pub mod free_question;
 pub mod grade;
 pub mod live_applicant;
+pub mod phone_audio;
 pub mod response;
 pub mod scenario_edit;
 pub mod scenario_gen;

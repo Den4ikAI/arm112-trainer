@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { cards, channel, type CardDetail } from '@/shared/api';
 import { useSession } from '@/entities/session/model';
@@ -8,6 +8,9 @@ import { BrigadePanel } from '@/widgets/brigade-panel/BrigadePanel';
 import { CallBar } from '@/widgets/call-bar/CallBar';
 import { CardHeader } from '@/widgets/card-header/CardHeader';
 import { ChiefReport } from '@/widgets/chief-report/ChiefReport';
+import { IpPhone } from '@/widgets/ip-phone/IpPhone';
+import { PhoneJournal } from '@/widgets/ip-phone/PhoneJournal';
+import { usePhone } from '@/entities/phone/model';
 import { ServiceTab } from '@/widgets/status-history/ServiceTab';
 import { SurveySummary } from '@/widgets/survey-card/SurveyCardView';
 import s from './CardDdsPage.module.scss';
@@ -30,6 +33,15 @@ export const CardDdsPage = () => {
   const user = useSession((st) => st.user);
   const serviceTitle = useCatalog((st) => st.serviceTitle);
   const serviceShort = useCatalog((st) => st.serviceShort);
+  const phoneConfig = usePhone((st) => st.config);
+  const loadPhone = usePhone((st) => st.load);
+  // Разговор по телефону меняет панели карточки: доклад бригады,
+  // разбор доклада начальнику
+  const [phoneTick, setPhoneTick] = useState(0);
+
+  // Параметры телефонии — при каждом открытии: администратор мог
+  // включить или выключить телефон
+  useEffect(() => { void loadPhone(); }, [loadPhone]);
 
   const reload = useCallback(async () => {
     try {
@@ -55,6 +67,12 @@ export const CardDdsPage = () => {
     if (user?.role !== 'student' || !addressed) return;
     void cards.opened(id).then(reload).catch(() => {});
   }, [id, user?.role, addressed, reload]);
+
+  const onPhone = useCallback(() => { setPhoneTick((n) => n + 1); void reload(); }, [reload]);
+  const brigadeStamp = useMemo(() => ({ card, phoneTick }), [card, phoneTick]);
+  // Звонит диспетчер своей службы, адресованной карточкой
+  const viaPhone = !!phoneConfig?.enabled;
+  const dispatcher = user?.role === 'student' && user.duty === 'dds' && addressed;
 
   // Одну карточку ведут несколько ДДС сразу: статус, проставленный
   // соседней службой, должен появиться без обновления страницы
@@ -128,12 +146,19 @@ export const CardDdsPage = () => {
           {/* Бригада и доклады — только своей службы: чужую бригаду
               диспетчер не направляет и докладов её не слышит */}
           {own && card.services.some((sv) => sv.serviceId === own) && (
-            <BrigadePanel cardId={card.id} serviceId={own} stamp={card} closed={closed} />
+            <BrigadePanel cardId={card.id} serviceId={own} stamp={brigadeStamp} closed={closed}
+                          viaPhone={viaPhone && dispatcher} onAssigned={onPhone} />
           )}
 
           {/* Доклад начальнику ведёт диспетчер своей службы; преподаватель
               видит его в разборе попытки ниже */}
-          {user?.role === 'student' && addressed && <ChiefReport cardId={card.id} closed={closed} />}
+          {user?.role === 'student' && addressed && (
+            <ChiefReport cardId={card.id} closed={closed} viaPhone={viaPhone && dispatcher} stamp={phoneTick} />
+          )}
+
+          {/* Журнал IP-телефона по карточке: преподаватель слушает
+              разговоры диспетчеров */}
+          {viaPhone && user?.role !== 'student' && <PhoneJournal cardId={card.id} />}
 
           {/* Оператор 112 открывает здесь свою сохранённую карточку: смотреть
               и читать разбор. Работа ДДС по ней — у диспетчеров служб */}
@@ -151,6 +176,10 @@ export const CardDdsPage = () => {
         </div>
 
         <div className={s.right}>
+          {viaPhone && dispatcher && (
+            <IpPhone cardId={card.id} serviceId={own} closed={closed} stamp={card} onActivity={onPhone} />
+          )}
+
           <div className={s.flagsRow}>
             <span>Пострадавшие: {card.victims == null ? 'нет' : card.victims}</span>
             <span>Нет контакта: {card.noContact ? 'да' : 'нет'}</span>
