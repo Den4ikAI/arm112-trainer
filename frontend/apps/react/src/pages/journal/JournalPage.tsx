@@ -5,6 +5,7 @@ import { useSession } from '@/entities/session/model';
 import { useStand } from '@/entities/stand/model';
 import { UserMenu } from '@/widgets/user-menu/UserMenu';
 import { StudentWork } from '@/widgets/student-work/StudentWork';
+import { UiHints } from '@/widgets/ui-hints/UiHints';
 import { ApiError, cards, channel, lessons, scenarios as scenariosApi, sessions, SEGMENT_LABEL,
          type CardBrief, type LessonBrief, type Protocol, type ScenarioBrief,
          type SessionState } from '@/shared/api';
@@ -266,7 +267,8 @@ export const JournalPage = () => {
         </div>
         )}
 
-        <div className={s.clock}>
+        {/* data-hint — якорь режима подсказок (widgets/ui-hints) */}
+        <div className={s.clock} data-hint="clock">
           <div className={s.clockDate}>
             {now.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric',
               month: 'long', year: 'numeric' })}
@@ -278,7 +280,12 @@ export const JournalPage = () => {
             </span>
           </div>
           {/* Курсанту разделы не нужны, и сервер его туда не пустит */}
-          <div className={s.clockUser}><UserMenu /></div>
+          <div className={s.clockUser}>
+            <UserMenu />
+            {/* Подсказки по окнам и кнопкам — самостоятельное знакомство
+                диспетчера с интерфейсом (рекомендация заказчика, п. 7) */}
+            {dds && <UiHints page="journal" compact />}
+          </div>
         </div>
       </div>
 
@@ -355,8 +362,10 @@ export const JournalPage = () => {
       )}
 
       {!op112 && (
-        <JournalTable rows={rows}
-                      pager={{ page, size: PAGE_SIZE, total, onPage: setPage }} />
+        <div data-hint="journal">
+          <JournalTable rows={rows}
+                        pager={{ page, size: PAGE_SIZE, total, onPage: setPage }} />
+        </div>
       )}
     </div>
   );

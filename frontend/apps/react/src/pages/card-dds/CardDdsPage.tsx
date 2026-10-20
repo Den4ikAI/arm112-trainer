@@ -11,6 +11,7 @@ import { ChiefReport } from '@/widgets/chief-report/ChiefReport';
 import { IpPhone } from '@/widgets/ip-phone/IpPhone';
 import { PhoneJournal } from '@/widgets/ip-phone/PhoneJournal';
 import { PhoneLauncher } from '@/widgets/phone-launcher/PhoneLauncher';
+import { UiHints } from '@/widgets/ui-hints/UiHints';
 import { usePhone } from '@/entities/phone/model';
 import { ServiceTab } from '@/widgets/status-history/ServiceTab';
 import { SurveySummary } from '@/widgets/survey-card/SurveyCardView';
@@ -117,19 +118,20 @@ export const CardDdsPage = () => {
 
       <div className={s.main}>
         <div className={s.left}>
-          <div className={s.applicantRow}>
+          {/* data-hint — якоря режима подсказок (widgets/ui-hints) */}
+          <div className={s.applicantRow} data-hint="applicant">
             {card.applicantName || 'ФИО заявителя'}
             {card.applicantStatus && ` (${card.applicantStatus})`}
           </div>
 
-          <div className={s.addr}>
+          <div className={s.addr} data-hint="address">
             <div className={s.addrMain}>{addr || 'Адрес не заполнен'}</div>
             {card.address.descriptive && (
               <div className={s.addrSub}>{card.address.descriptive}</div>
             )}
           </div>
 
-          <div className={s.feed}>
+          <div className={s.feed} data-hint="description">
             <div className={s.feedRow}>
               <div className={s.feedMeta}>
                 {new Date(card.savedAt ?? card.createdAt).toLocaleString('ru-RU')}
@@ -140,7 +142,7 @@ export const CardDdsPage = () => {
           </div>
 
           {own && (
-            <div className={s.hint}>
+            <div className={s.hint} data-hint="norms">
               Ваша служба — {serviceTitle(own)}. Нормативы: открыть карточку — 30 с
               с поступления, первая запись (статус и текст) — 3 мин.
             </div>
@@ -179,7 +181,7 @@ export const CardDdsPage = () => {
         </div>
 
         <div className={s.right}>
-          <div className={s.flagsRow}>
+          <div className={s.flagsRow} data-hint="flags">
             <span>Пострадавшие: {card.victims == null ? 'нет' : card.victims}</span>
             <span>Нет контакта: {card.noContact ? 'да' : 'нет'}</span>
             <span>Срыв звонка: {card.callDropped ? 'да' : 'нет'}</span>
@@ -225,6 +227,9 @@ export const CardDdsPage = () => {
               <path d="M2 2l5 4 5-4M2 14l5-4 5 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
             </svg>
           </button>
+          {/* Подсказки по окнам и кнопкам — самостоятельное знакомство
+              диспетчера с интерфейсом (рекомендация заказчика, п. 7) */}
+          {user?.role === 'student' && user.duty === 'dds' && <UiHints page="card-dds" />}
         </div>
         <div className={s.barRight}>
           <button {...stubProps('Сообщение')} className={s.barBtn}>
