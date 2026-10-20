@@ -789,7 +789,7 @@ async fn applicant_reply(
     let what = if what.is_empty() { "то, что уже сообщал в 112".to_string() } else { what.to_string() };
     let fallback = match (said, turn) {
         (None, _) => format!("Да, слушаю. Это я звонил{a} в 112: {what}"),
-        (Some(_), 0 | 1) => format!("Я уже всё сказа{la} оператору: {what} Когда вас ждать?"),
+        (Some(_), 0) => format!("Я уже всё сказа{la} оператору: {what} Когда вас ждать?"),
         _ => "Ничего нового, всё как говорил. Жду вас.".replace("говорил", if female { "говорила" } else { "говорил" }),
     };
     let Some(question) = said else { return fallback };
@@ -823,7 +823,7 @@ async fn applicant_reply(
 fn org_head_reply(title: &str, said: Option<&str>, turn: usize) -> (String, bool) {
     match (said, turn) {
         (None, _) => (format!("{title} слушает. Докладывайте."), false),
-        (Some(_), 0 | 1) => ("Понял вас. Что по силам и срокам, и нужна ли помощь?".into(), false),
+        (Some(_), 0) => ("Понял вас. Что по силам и срокам, и нужна ли помощь?".into(), false),
         _ => ("Принял доклад. Держите меня в курсе.".into(), true),
     }
 }
