@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, cards, channel, type Brigade, type DdsFindingKind, type VoiceStatus } from '@/shared/api';
 import clsx from '@/shared/lib/clsx';
+import { MyDdsAdvice } from '@/widgets/advice/MyDdsAdvice';
 import {
   canRecord, micBlockedReason, recognize, setSoundOn, soundOn, speak, startRecording, stopSpeaking,
   voiceStatus, type Recording,
@@ -292,6 +293,9 @@ export const BrigadePanel = ({
             {f.consequence && <div className={s.consequence}>{f.consequence}</div>}
           </div>
         ))}
+        {/* Рекомендации по разбору и следующее задание от ИИ под них —
+            после того, как служба закончила работу по карточке */}
+        <MyDdsAdvice cardId={cardId} closed={closed} />
       </div>
     </section>
   );

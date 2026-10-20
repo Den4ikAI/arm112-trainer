@@ -3,6 +3,7 @@ import {
   analytics, CHECK_GROUP, type CheckGroup, type GroupAnalytics, type StudentAnalytics,
 } from '@/shared/api/teacher';
 import clsx from '@/shared/lib/clsx';
+import { AdviceBlock } from '@/widgets/advice/AdviceBlock';
 import s from './Teacher.module.scss';
 import { useStand } from '@/entities/stand/model';
 
@@ -83,6 +84,10 @@ export const PeopleAnalytics = ({ groupId }: { groupId: string }) => {
 
       {error && <p className={s.empty}>Аналитика недоступна.</p>}
       {!data && !error && <p className={s.empty}>Считаю…</p>}
+
+      {/* Сработали ли рекомендации диспетчерам: тот же блок, что у
+          операторов 112 в отчёте группы */}
+      {duty === 'dds' && data && <AdviceBlock groupId={groupId} source="dds" />}
 
       {data && (
         <>
