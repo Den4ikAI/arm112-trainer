@@ -157,6 +157,10 @@ use utoipa::{
         crate::api::phone::add_line,
         crate::api::phone::line_audio,
         crate::api::phone::recording,
+        crate::api::phone::reply,
+        crate::api::phonebook::view,
+        crate::api::phonebook::save,
+        crate::api::phonebook::reset,
     ),
     modifiers(&BearerAuth),
 )]
