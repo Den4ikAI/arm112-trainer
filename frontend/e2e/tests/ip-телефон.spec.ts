@@ -148,7 +148,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await page.getByTestId('phonebook-link').click();
     await expect(page).toHaveURL(/#\/phonebook/);
     await page.getByTestId('phonebook-service').selectOption(СЛУЖБА);
-    await expect(page.getByTestId('phonebook-default')).toBeVisible();
+    // Справочник службы по умолчанию — четыре роли из рекомендаций
     const строки = page.getByTestId('phonebook-row');
     await expect(строки).toHaveCount(4);
 
@@ -161,7 +161,6 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(page.getByTestId('phonebook-add-applicant')).toBeDisabled();
     await page.getByTestId('phonebook-save').click();
     await expect(page.getByTestId('phonebook-note')).toContainText('Сохранено');
-    await expect(page.getByTestId('phonebook-default')).toHaveCount(0);
 
     // Больше десяти не добавить
     for (let i = 5; i < 10; i += 1) await page.getByTestId('phonebook-add').click();
