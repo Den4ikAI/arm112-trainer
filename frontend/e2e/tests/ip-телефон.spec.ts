@@ -200,6 +200,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
           WHERE id = '${карточка}';`);
     await login(page, info, USERS.mchs);
     await go(page, info, `/card-dds/${карточка}`);
+    await page.getByTestId('phone-launcher').click();
     await expect(page.getByTestId('ip-phone')).toBeVisible();
 
     await page.getByTestId('phone-call-org_head').click();
