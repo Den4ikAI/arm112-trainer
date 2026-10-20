@@ -500,9 +500,10 @@ export const cards = {
   assignBrigade: (id: string, serviceId: string, brigadeNo: number) =>
     api.post<Brigade>(`/api/cards/${id}/brigade`, { serviceId, brigadeNo }),
   /** Диспетчер сам звонит старшему и узнаёт текущий этап. */
-  callBrigade: (id: string, serviceId: string, said?: string) =>
+  /** `speaker` — кто на линии: начальник (старший) бригады или её специалист. */
+  callBrigade: (id: string, serviceId: string, said?: string, speaker?: 'head' | 'specialist') =>
     api.post<{ text: string; learned: string | null; brigade: Brigade }>(
-      `/api/cards/${id}/brigade/call`, { serviceId, said }),
+      `/api/cards/${id}/brigade/call`, { serviceId, said, speaker }),
 };
 
 export const admin = {
@@ -621,6 +622,24 @@ export const phone = {
   /** Запись разговора, WAV. */
   recording: async (callId: string) =>
     (await rawRequest(`/api/phone/calls/${callId}/recording`, { method: 'GET' })).blob(),
+  /** Реплика руководителя организации или заявителя: без текста —
+   *  абонент снял трубку. Сервер сам пишет её в журнал разговора. */
+  reply: (callId: string, text?: string) =>
+    api.post<import('./types').PhoneReply>(`/api/phone/calls/${callId}/reply`, text ? { text } : {}),
+};
+
+/**
+ * Телефонный справочник ДДС: формирует преподаватель, не более 10
+ * номеров на службу (рекомендации финалистам, п. 8).
+ */
+export const phonebook = {
+  view: (serviceId?: string) =>
+    api.get<import('./types').PhoneBook>(`/api/phonebook${serviceId
+      ? `?serviceId=${encodeURIComponent(serviceId)}` : ''}`),
+  save: (serviceId: string, entries: import('./types').PhoneBookEntry[]) =>
+    api.put<import('./types').PhoneBook>(`/api/phonebook?serviceId=${encodeURIComponent(serviceId)}`, { entries }),
+  reset: (serviceId: string) =>
+    api.del<import('./types').PhoneBook>(`/api/phonebook?serviceId=${encodeURIComponent(serviceId)}`),
 };
 
 /**

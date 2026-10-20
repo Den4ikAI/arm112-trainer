@@ -687,7 +687,11 @@ export interface PhoneConfig {
   extension: string | null;
 }
 
-export type PhonePeer = 'brigade' | 'chief';
+/** Роли абонентов справочника ДДС (рекомендации финалистам, п. 8).
+ *  `brigade` и `chief` — прежние имена в старых записях журнала. */
+export type PhonePeer =
+  | 'org_head' | 'response_head' | 'brigade_head' | 'brigade_specialist' | 'applicant'
+  | 'brigade' | 'chief';
 
 export interface PhoneContact {
   peer: PhonePeer;
@@ -695,6 +699,32 @@ export interface PhoneContact {
   number: string;
   available: boolean;
   note: string | null;
+  /** Голос синтеза для реплик абонента. */
+  voice: VoiceRole;
+}
+
+/** Запись справочника службы, которую правит преподаватель. */
+export interface PhoneBookEntry {
+  role: PhonePeer;
+  /** У заявителя пустой — номер берётся из карточки. */
+  number: string;
+  title: string;
+}
+
+export interface PhoneBook {
+  serviceId: string;
+  entries: PhoneBookEntry[];
+  /** Преподаватель записи не правил — показан справочник по умолчанию. */
+  isDefault: boolean;
+  max: number;
+  roles: { role: PhonePeer; title: string }[];
+}
+
+/** Ответ абонента, у которого нет своего модуля разговора. */
+export interface PhoneReply {
+  text: string;
+  /** Абонент сказал всё и кладёт трубку. */
+  finished: boolean;
 }
 
 export interface PhoneLine {
@@ -722,6 +752,7 @@ export interface PhoneCall {
   durationSec: number | null;
   lines: PhoneLine[];
   recording: boolean;
+  voice: VoiceRole;
 }
 
 export interface PhoneView {

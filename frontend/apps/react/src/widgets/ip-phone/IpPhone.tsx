@@ -60,8 +60,12 @@ const errorText = (e: unknown, fallback: string) =>
  * (инструкция, разделы 2 и 10): статус линии, входящий с АОН, набор
  * номера и телефонная книга, удержание, отключение микрофона, журнал.
  *
- * Собеседники — старший своей бригады и вышестоящий начальник. Что они
- * говорят, решает сервер (`api::brigade`, `api::chief`), голос — синтез.
+ * Абоненты — из справочника службы, который формирует преподаватель
+ * (рекомендации финалистам, п. 8): руководитель организации, начальник
+ * отдела реагирования, начальник и специалист аварийной бригады и, если
+ * преподаватель включил, заявитель по номеру из карточки. Что они
+ * говорят, решает сервер (`api::brigade`, `api::chief`, `api::phone`),
+ * голос — синтез.
  * Диспетчер говорит в микрофон: нажал — говорит, нажал ещё раз — фраза
  * распознаётся. Нет голоса или микрофона — та же работа текстом.
  * Разговор пишется в журнал вызовов, голос диспетчера — в запись,
@@ -115,6 +119,10 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
     timer.current = null;
   };
 
+  // Справочник нужен обработчику входящих, созданному раньше
+  const bookRef = useRef<PhoneContact[]>([]);
+  useEffect(() => { bookRef.current = view?.phonebook ?? []; }, [view]);
+
   const reload = useCallback(async () => {
     try {
       setView(await phone.view(cardId));
@@ -134,16 +142,31 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
 
   // ─── Реплики ───────────────────────────────────────────────────
 
-  const roleOf = (peer: PhonePeer) => (peer === 'chief' ? 'chief' : 'brigade');
+  /** Через какой модуль говорит абонент: бригада — по этапам работ,
+   *  начальник отдела — доклад с разбором, остальные — ответы телефона. */
+  const engineOf = (peer: PhonePeer): 'brigade' | 'chief' | 'phone' => {
+    if (peer === 'brigade' || peer === 'brigade_head' || peer === 'brigade_specialist') return 'brigade';
+    if (peer === 'chief' || peer === 'response_head') return 'chief';
+    return 'phone';
+  };
+  const speakerOf = (peer: PhonePeer) => (peer === 'brigade_specialist' ? 'specialist' : 'head');
 
-  /** Собеседник сказал: на экран, в журнал и вслух. Доклад старшего
-   *  начинается с «Старший бригады 2:» — по телефону он и так на экране. */
-  const peerSays = (call: PhoneCall, raw: string) => {
-    const said = raw.replace(/^Старший бригады\s*№?\s*\d+\s*:\s*/i, '').trim();
+  /** Собеседник сказал: на экран, в журнал и вслух. Доклад бригады
+   *  начинается с «Старший бригады 2:» — по телефону он и так на экране.
+   *  `stored` — сервер уже записал реплику в журнал сам. */
+  const peerSays = (call: PhoneCall, raw: string, stored = false) => {
+    const said = raw.replace(/^(Старший|Специалист) бригады\s*№?\s*\d+\s*:\s*/i, '').trim();
     if (!said) return;
     setLive((l) => (l && l.call.id === call.id ? { ...l, lines: [...l.lines, { who: 'peer', text: said }] } : l));
-    void phone.line(call.id, 'peer', said).catch(() => undefined);
-    if (!holdRef.current) void speak(said, roleOf(call.peer));
+    if (!stored) void phone.line(call.id, 'peer', said).catch(() => undefined);
+    if (!holdRef.current) void speak(said, call.voice);
+  };
+
+  /** Абонент кладёт трубку сам, договорив. */
+  const peerHangsUp = (callId: string, why: string) => {
+    window.setTimeout(() => {
+      if (liveRef.current?.call.id === callId) void hangUp(why);
+    }, 2500);
   };
 
   /** Новые реплики начальника из его разговора. */
@@ -173,7 +196,7 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
     if (why) setNote(why);
     // Доклад начальнику кончается, когда кладут трубку: начальник
     // разбирает то, что успели доложить
-    if (l.call.peer === 'chief' && l.state === 'talking') {
+    if (engineOf(l.call.peer) === 'chief' && l.state === 'talking') {
       await chief.finish(cardId).catch(() => undefined);
     }
     await phone.end(l.call.id).catch(() => undefined);
@@ -191,16 +214,21 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
       const answered = await phone.answer(call.id);
       setLive((l) => (l ? { ...l, call: answered, state: 'talking', since: Date.now() } : l));
       setWaiting(true);
-      if (call.peer === 'brigade') {
-        // Старший называет, что у бригады сейчас
-        const r = await cards.callBrigade(cardId, serviceId);
+      const engine = engineOf(call.peer);
+      if (engine === 'brigade') {
+        // Старший (или специалист) называет, что у бригады сейчас
+        const r = await cards.callBrigade(cardId, serviceId, undefined, speakerOf(call.peer));
         peerSays(answered, r.text);
-      } else {
+      } else if (engine === 'chief') {
         const v = await chief.start(cardId);
         // Начатый раньше доклад продолжается: начальник повторяет
         // последнее, что сказал, а не весь разговор
         chiefSeen.current = Math.max(0, v.lines.length - 1);
         chiefLines(answered, v.lines);
+      } else {
+        // Руководитель организации, заявитель: сняли трубку
+        const r = await phone.reply(answered.id);
+        peerSays(answered, r.text, true);
       }
       onActivity();
     } catch (e) {
@@ -236,7 +264,8 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
   const dialNumber = () => {
     const number = dialed.trim();
     if (!number) return;
-    const contact = view?.phonebook.find((c) => c.number === number);
+    // Номер заявителя в карточке — с пробелами и скобками, набирают цифрами
+    const contact = view?.phonebook.find((c) => c.number.replace(/\D/g, '') === number);
     if (!contact) {
       busyTone();
       setError(`Номер ${number} не обслуживается`);
@@ -255,7 +284,7 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
       return;
     }
     try {
-      const call = await phone.dial(cardId, 'brigade', 'in');
+      const call = await phone.dial(cardId, 'brigade_head', 'in');
       setLive({ call, state: 'ringing', lines: [], since: null, report });
       setNote(null);
       tone.current = ringIncoming();
@@ -299,7 +328,9 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
   const onReport = useRef(incoming);
   useEffect(() => { onReport.current = incoming; });
   useEffect(() => channel.on((e) => {
-    if (e.type === 'brigade.report' && e.cardId === cardId && e.serviceId === serviceId) {
+    // Звонит начальник бригады — если преподаватель оставил его в справочнике
+    if (e.type === 'brigade.report' && e.cardId === cardId && e.serviceId === serviceId
+        && bookRef.current.some((c) => c.peer === 'brigade_head')) {
       void onReport.current(String(e.text ?? ''));
     }
   }), [cardId, serviceId]);
@@ -325,18 +356,19 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
     try {
       const line = await phone.line(l.call.id, 'dispatcher', t);
       if (wav && cfg.current?.record) void phone.lineAudio(l.call.id, line.id, wav).catch(() => undefined);
-      if (l.call.peer === 'brigade') {
-        const r = await cards.callBrigade(cardId, serviceId, t);
+      const engine = engineOf(l.call.peer);
+      if (engine === 'brigade') {
+        const r = await cards.callBrigade(cardId, serviceId, t, speakerOf(l.call.peer));
         peerSays(l.call, r.text);
-      } else {
+      } else if (engine === 'chief') {
         const v = await chief.say(cardId, t);
         chiefLines(l.call, v.lines);
-        if (v.finishedAt) {
-          // «Принял» — начальник кладёт трубку сам
-          window.setTimeout(() => {
-            if (liveRef.current?.call.id === l.call.id) void hangUp('Начальник принял доклад и положил трубку');
-          }, 2500);
-        }
+        // «Принял» — начальник кладёт трубку сам
+        if (v.finishedAt) peerHangsUp(l.call.id, 'Начальник принял доклад и положил трубку');
+      } else {
+        const r = await phone.reply(l.call.id, t);
+        peerSays(l.call, r.text, true);
+        if (r.finished) peerHangsUp(l.call.id, `${l.call.title} принял доклад и положил трубку`);
       }
       onActivity();
     } catch (e) {
@@ -510,7 +542,7 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
                       {c.note && <span className={s.muted}> — {c.note}</span>}
                     </span>
                     <button className={s.call} data-testid={`phone-call-${c.peer}`}
-                            disabled={!c.available || (closed && c.peer === 'brigade')}
+                            disabled={!c.available || (closed && engineOf(c.peer) === 'brigade')}
                             title={c.note ?? `Позвонить: ${c.number}`}
                             onClick={() => void dial(c)}>
                       📞 Вызов
@@ -521,7 +553,7 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingin
               <form className={s.row} onSubmit={(e) => { e.preventDefault(); dialNumber(); }}>
                 <input className={s.input} value={dialed} inputMode="numeric" placeholder="Номер"
                        aria-label="Набрать номер" data-testid="phone-dial"
-                       onChange={(e) => setDialed(e.target.value.replace(/[^\d]/g, '').slice(0, 6))} />
+                       onChange={(e) => setDialed(e.target.value.replace(/[^\d]/g, '').slice(0, 11))} />
                 <button className={s.btn} type="submit" disabled={!dialed} data-testid="phone-dial-go">
                   Набрать
                 </button>

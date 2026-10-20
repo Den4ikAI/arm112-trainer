@@ -10,6 +10,7 @@ import { AnalyticsPage } from '@/pages/analytics/AnalyticsPage';
 import { ScenariosPage } from '@/pages/scenarios/ScenariosPage';
 import { LessonsPage } from '@/pages/lessons/LessonsPage';
 import { WeightsPage } from '@/pages/teacher/WeightsPage';
+import { PhonebookPage } from '@/pages/teacher/PhonebookPage';
 import { LessonMonitorPage } from '@/pages/teacher/LessonMonitorPage';
 import { useSession, otherDuty, dutyTitle } from '@/entities/session/model';
 import { NotForDuty } from '@/shared/ui/NotForDuty';
@@ -56,6 +57,7 @@ export const App = () => {
       <Route path="/lessons" element={<Private><LessonsPage /></Private>} />
       <Route path="/lessons/:id/monitor" element={<Private><LessonMonitorPage /></Private>} />
       <Route path="/weights" element={<Private><WeightsPage /></Private>} />
+      <Route path="/phonebook" element={<Private><PhonebookPage /></Private>} />
     </Routes>
   );
 };

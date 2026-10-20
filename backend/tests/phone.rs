@@ -191,10 +191,10 @@ async fn справочник_бригада_появляется_после_н�
     let (status, вид) = call(&app, Method::GET, &путь, Some(&т), None).await;
     assert_eq!(status, StatusCode::OK, "{вид}");
     let книга = вид["phonebook"].as_array().unwrap();
-    let бригада = книга.iter().find(|з| з["peer"] == "brigade").unwrap();
+    let бригада = книга.iter().find(|з| з["peer"] == "brigade_head").unwrap();
     assert_eq!(бригада["available"], false);
     assert_eq!(бригада["note"], "бригада не назначена");
-    let начальник = книга.iter().find(|з| з["peer"] == "chief").unwrap();
+    let начальник = книга.iter().find(|з| з["peer"] == "response_head").unwrap();
     assert_eq!(начальник["available"], true);
     assert_eq!(начальник["number"], "2999");
 
@@ -205,10 +205,10 @@ async fn справочник_бригада_появляется_после_н�
     направить(&pool, &с).await;
     let (_, вид) = call(&app, Method::GET, &путь, Some(&т), None).await;
     let бригада = вид["phonebook"].as_array().unwrap().iter()
-        .find(|з| з["peer"] == "brigade").unwrap().clone();
+        .find(|з| з["peer"] == "brigade_head").unwrap().clone();
     assert_eq!(бригада["available"], true);
-    assert_eq!(бригада["title"], "Старший бригады № 2");
-    assert_eq!(бригада["number"], "2982");
+    assert_eq!(бригада["title"], "Начальник аварийной бригады № 2");
+    assert_eq!(бригада["number"], "2981");
 
     // Служба закончила работу — старшему звонить незачем
     sqlx::query("INSERT INTO response_entries (card_id, service_id, status, operator)
@@ -230,7 +230,7 @@ async fn исходящий_разговор_попадает_в_журнал_и
     let (status, вызов) = набрать(&app, &с, &т, "brigade", "out").await;
     assert_eq!(status, StatusCode::CREATED, "{вызов}");
     assert_eq!(вызов["outcome"], "ringing");
-    assert_eq!(вызов["number"], "2982");
+    assert_eq!(вызов["number"], "2981");
     assert_eq!(вызов["direction"], "out");
     let id = вызов["id"].as_str().unwrap().to_string();
 
@@ -277,7 +277,7 @@ async fn исходящий_разговор_попадает_в_журнал_и
     let (_, вид) = call(&app, Method::GET, &format!("/api/cards/{}/phone", с.card), Some(&т), None).await;
     let в = &вид["calls"][0];
     assert_eq!(в["id"], id.as_str());
-    assert_eq!(в["title"], "Старший бригады № 2");
+    assert_eq!(в["title"], "Начальник аварийной бригады № 2");
     assert_eq!(в["lines"][0]["text"], "Диспетчер ДДС, доложите обстановку");
     assert_eq!(в["lines"][0]["hasAudio"], true);
     assert_eq!(в["lines"][1]["who"], "peer");
@@ -358,7 +358,7 @@ async fn входящий_пропущен_или_сброшен() {
     assert_eq!(вызов["outcome"], "declined");
 
     // Начальник сам не звонит, незнакомых собеседников нет
-    let (status, _) = набрать(&app, &с, &т, "chief", "in").await;
+    let (status, _) = набрать(&app, &с, &т, "response_head", "in").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (status, _) = набрать(&app, &с, &т, "соседи", "out").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -418,4 +418,191 @@ async fn чужой_вызов_не_виден_и_звонит_только_ди
 
     прибрать(&pool, &с).await;
     прибрать(&pool, &чужой).await;
+}
+
+// ─── Справочник от преподавателя (рекомендации финалистам, п. 8) ─────
+
+async fn сохранить_справочник(app: &Router, т: &str, service: &str, entries: Value) -> (StatusCode, Value) {
+    call(app, Method::PUT, &format!("/api/phonebook?serviceId={service}"), Some(т),
+        Some(json!({ "entries": entries }))).await
+}
+
+#[tokio::test]
+async fn справочник_правит_преподаватель_не_более_десяти_номеров() {
+    let Some((app, pool)) = app().await else { return };
+    let с = стенд(&pool).await;
+    let т = токен(&app, &с.login).await;
+    let тп = токен(&app, "teacher1").await;
+    let путь = format!("/api/phonebook?serviceId={}", с.service);
+
+    // Служба без своих записей — справочник по умолчанию: четыре роли
+    let (status, книга) = call(&app, Method::GET, &путь, Some(&тп), None).await;
+    assert_eq!(status, StatusCode::OK, "{книга}");
+    assert_eq!(книга["isDefault"], true);
+    assert_eq!(книга["max"], 10);
+    let роли: Vec<&str> = книга["entries"].as_array().unwrap().iter()
+        .map(|e| e["role"].as_str().unwrap()).collect();
+    assert_eq!(роли, ["brigade_head", "brigade_specialist", "response_head", "org_head"]);
+    assert_eq!(книга["entries"][2]["number"], "2999", "начальник отдела — прежний номер начальника");
+    assert_eq!(книга["roles"].as_array().unwrap().len(), 5);
+
+    // Курсант читает свой, чужой — нет, и не правит
+    let (status, своя) = call(&app, Method::GET, "/api/phonebook", Some(&т), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(своя["serviceId"], с.service.as_str());
+    let (status, _) = call(&app, Method::GET, "/api/phonebook?serviceId=mchs", Some(&т), None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = сохранить_справочник(&app, &т, &с.service, json!([])).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Больше десяти — нельзя
+    let много: Vec<Value> = (0..11).map(|i| json!({
+        "role": "brigade_specialist", "number": format!("31{i:02}"), "title": format!("Специалист {i}") })).collect();
+    let (status, ответ) = сохранить_справочник(&app, &тп, &с.service, json!(много)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{ответ}");
+    // Повтор номера, чужая роль, не цифры, пустая подпись — тоже
+    for плохо in [
+        json!([{ "role": "org_head", "number": "3001", "title": "Руководитель" },
+               { "role": "response_head", "number": "3001", "title": "Начальник отдела" }]),
+        json!([{ "role": "neighbour", "number": "3001", "title": "Сосед" }]),
+        json!([{ "role": "org_head", "number": "30-01", "title": "Руководитель" }]),
+        json!([{ "role": "org_head", "number": "3001", "title": "  " }]),
+    ] {
+        let (status, _) = сохранить_справочник(&app, &тп, &с.service, плохо).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    // Преподаватель сохранил десять с заявителем — сохранилось как есть
+    let mut десять: Vec<Value> = (0..9).map(|i| json!({
+        "role": if i == 0 { "org_head" } else { "brigade_specialist" },
+        "number": format!("31{i:02}"), "title": format!("Абонент {i}") })).collect();
+    десять.push(json!({ "role": "applicant", "number": "", "title": "Заявитель" }));
+    let (status, книга) = сохранить_справочник(&app, &тп, &с.service, json!(десять)).await;
+    assert_eq!(status, StatusCode::OK, "{книга}");
+    assert_eq!(книга["isDefault"], false);
+    assert_eq!(книга["entries"].as_array().unwrap().len(), 10);
+    assert_eq!(книга["entries"][0]["title"], "Абонент 0");
+    let (_, своя) = call(&app, Method::GET, "/api/phonebook", Some(&т), None).await;
+    assert_eq!(своя["entries"][9]["role"], "applicant");
+
+    // Сброс — снова по умолчанию; службы нет — 404
+    let (status, книга) = call(&app, Method::DELETE, &путь, Some(&тп), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(книга["isDefault"], true);
+    let (status, _) = call(&app, Method::GET, "/api/phonebook?serviceId=нет-такой", Some(&тп), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    прибрать(&pool, &с).await;
+}
+
+#[tokio::test]
+async fn звонок_по_ролям_справочника_и_заявителю_по_карточке() {
+    let Some((app, pool)) = app().await else { return };
+    let с = стенд(&pool).await;
+    направить(&pool, &с).await;
+    let т = токен(&app, &с.login).await;
+    let тп = токен(&app, "teacher1").await;
+    let вид = format!("/api/cards/{}/phone", с.card);
+
+    // Заявителя в справочнике нет — его нет и в телефоне, звонок не идёт
+    let (_, книга) = call(&app, Method::GET, &вид, Some(&т), None).await;
+    assert!(книга["phonebook"].as_array().unwrap().iter().all(|з| з["peer"] != "applicant"));
+    let (status, _) = набрать(&app, &с, &т, "applicant", "out").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Преподаватель составил перечень: руководитель, бригада, заявитель
+    let (status, _) = сохранить_справочник(&app, &тп, &с.service, json!([
+        { "role": "org_head", "number": "3010", "title": "Руководитель организации Петров" },
+        { "role": "brigade_head", "number": "3011", "title": "Начальник аварийной бригады" },
+        { "role": "brigade_specialist", "number": "3012", "title": "Специалист аварийной бригады" },
+        { "role": "applicant", "number": "", "title": "Заявитель" },
+    ])).await;
+    assert_eq!(status, StatusCode::OK);
+
+    // В карточке номера заявителя нет — звонить некуда
+    let (_, книга) = call(&app, Method::GET, &вид, Some(&т), None).await;
+    let заявитель = книга["phonebook"].as_array().unwrap().iter().find(|з| з["peer"] == "applicant").unwrap().clone();
+    assert_eq!(заявитель["available"], false);
+    assert_eq!(заявитель["note"], "в карточке нет номера заявителя");
+    let (status, _) = набрать(&app, &с, &т, "applicant", "out").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Появился АОН — диспетчер набирает номер из карточки
+    sqlx::query("UPDATE cards SET phone_aon = '+7 (916) 000-00-01', applicant_name = 'Смирнова Анна Ильинична',
+                        description = 'Собака застряла в вентиляционной шахте подвала' WHERE id = $1")
+        .bind(с.card).execute(&pool).await.unwrap();
+    let (_, книга) = call(&app, Method::GET, &вид, Some(&т), None).await;
+    let заявитель = книга["phonebook"].as_array().unwrap().iter().find(|з| з["peer"] == "applicant").unwrap().clone();
+    assert_eq!(заявитель["available"], true);
+    assert_eq!(заявитель["number"], "+7 (916) 000-00-01");
+    assert_eq!(заявитель["title"], "Заявитель — Смирнова Анна Ильинична");
+    assert_eq!(заявитель["voice"], "applicant_f");
+    // Заявитель сам не звонит
+    let (status, _) = набрать(&app, &с, &т, "applicant", "in").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, вызов) = набрать(&app, &с, &т, "applicant", "out").await;
+    assert_eq!(status, StatusCode::CREATED, "{вызов}");
+    assert_eq!(вызов["number"], "+7 (916) 000-00-01");
+    let id = вызов["id"].as_str().unwrap().to_string();
+    // До ответа заявитель молчит
+    let (status, _) = call(&app, Method::POST, &format!("/api/phone/calls/{id}/reply"), Some(&т), Some(json!({}))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    call(&app, Method::POST, &format!("/api/phone/calls/{id}/answer"), Some(&т), None).await;
+    // Снял трубку: повторяет то, что сообщил в 112, — описание карточки
+    let (status, ответ) = call(&app, Method::POST, &format!("/api/phone/calls/{id}/reply"), Some(&т), Some(json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{ответ}");
+    let сказал = ответ["text"].as_str().unwrap();
+    assert!(сказал.contains("звонила в 112"), "{сказал}");
+    assert!(сказал.contains("вентиляционной шахте"), "{сказал}");
+    call(&app, Method::POST, &format!("/api/phone/calls/{id}/lines"), Some(&т),
+        Some(json!({ "who": "dispatcher", "text": "Бригада выехала, ждите" }))).await;
+    let (_, ответ) = call(&app, Method::POST, &format!("/api/phone/calls/{id}/reply"), Some(&т),
+        Some(json!({ "text": "Бригада выехала, ждите" }))).await;
+    assert_eq!(ответ["finished"], false);
+    let (_, вид_ж) = call(&app, Method::GET, &вид, Some(&т), None).await;
+    assert_eq!(вид_ж["calls"][0]["lines"].as_array().unwrap().len(), 3, "реплики заявителя — в журнале");
+    assert_eq!(вид_ж["calls"][0]["title"], "Заявитель — Смирнова Анна Ильинична");
+    assert_eq!(вид_ж["calls"][0]["voice"], "applicant_f");
+    call(&app, Method::POST, &format!("/api/phone/calls/{id}/end"), Some(&т), None).await;
+
+    // Руководитель организации: слушает, уточняет, принимает и кладёт трубку
+    let (status, вызов) = набрать(&app, &с, &т, "org_head", "out").await;
+    assert_eq!(status, StatusCode::CREATED, "{вызов}");
+    assert_eq!(вызов["number"], "3010");
+    assert_eq!(вызов["title"], "Руководитель организации Петров");
+    let id = вызов["id"].as_str().unwrap().to_string();
+    call(&app, Method::POST, &format!("/api/phone/calls/{id}/answer"), Some(&т), None).await;
+    let (_, ответ) = call(&app, Method::POST, &format!("/api/phone/calls/{id}/reply"), Some(&т), Some(json!({}))).await;
+    assert!(ответ["text"].as_str().unwrap().starts_with("Руководитель организации Петров слушает"), "{ответ}");
+    for (i, фраза) in ["Докладываю: бригада на месте", "Сил достаточно, помощь не нужна"].iter().enumerate() {
+        call(&app, Method::POST, &format!("/api/phone/calls/{id}/lines"), Some(&т),
+            Some(json!({ "who": "dispatcher", "text": фраза }))).await;
+        let (_, ответ) = call(&app, Method::POST, &format!("/api/phone/calls/{id}/reply"), Some(&т),
+            Some(json!({ "text": фраза }))).await;
+        assert_eq!(ответ["finished"], i == 1, "{ответ}");
+    }
+
+    // Специалист бригады — по этапам бригады, своими словами
+    let (status, вызов) = набрать(&app, &с, &т, "brigade_specialist", "out").await;
+    assert_eq!(status, StatusCode::CREATED, "{вызов}");
+    assert_eq!(вызов["title"], "Специалист аварийной бригады № 2");
+    assert_eq!(вызов["voice"], "brigade");
+    let id = вызов["id"].as_str().unwrap().to_string();
+    call(&app, Method::POST, &format!("/api/phone/calls/{id}/answer"), Some(&т), None).await;
+    let (status, _) = call(&app, Method::POST, &format!("/api/phone/calls/{id}/reply"), Some(&т), Some(json!({}))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "специалист говорит через бригаду");
+    let (status, бригада) = call(&app, Method::POST, &format!("/api/cards/{}/brigade/call", с.card), Some(&т),
+        Some(json!({ "serviceId": с.service, "speaker": "specialist" }))).await;
+    assert_eq!(status, StatusCode::OK, "{бригада}");
+    assert!(бригада["text"].as_str().unwrap().starts_with("Специалист бригады 2:"), "{бригада}");
+
+    // Прежние имена собеседников принимаются: brigade — начальник бригады
+    let (status, вызов) = набрать(&app, &с, &т, "brigade", "in").await;
+    assert_eq!(status, StatusCode::CREATED, "{вызов}");
+    assert_eq!(вызов["peer"], "brigade_head");
+    assert_eq!(вызов["number"], "3011");
+
+    call(&app, Method::DELETE, &format!("/api/phonebook?serviceId={}", с.service), Some(&тп), None).await;
+    прибрать(&pool, &с).await;
 }

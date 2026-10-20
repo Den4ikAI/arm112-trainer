@@ -10,6 +10,7 @@ const TEACHER_LINKS: [string, string, string][] = [
   ['/scenarios', 'вызовы', 'scenarios-link'],
   ['/analytics', 'аналитика', 'analytics-link'],
   ['/weights', 'веса оценки', 'weights-link'],
+  ['/phonebook', 'телефоны ДДС', 'phonebook-link'],
   ['/journal', 'журнал', 'journal-link'],
 ];
 
