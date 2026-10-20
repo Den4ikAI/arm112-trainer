@@ -4,6 +4,7 @@ import { ApiError, channel, ddsIncidents, me, SEGMENT_LABEL, type WorkItem, type
 import { useTraining } from '@/entities/incident/model';
 import { useSession } from '@/entities/session/model';
 import clsx from '@/shared/lib/clsx';
+import { MyDdsAdvice } from '@/widgets/advice/MyDdsAdvice';
 import s from './StudentWork.module.scss';
 
 /**
@@ -161,6 +162,10 @@ export const StudentWork = () => {
       )}
 
       {error && <div className={s.error} role="alert">{error}</div>}
+
+      {/* Что тренировать дальше — по разборам закрытых карточек; отсюда
+          же берётся следующее задание от ИИ */}
+      {profile === 'dds' && section === 'training' && <MyDdsAdvice />}
 
       <table className={s.table}>
         <thead>

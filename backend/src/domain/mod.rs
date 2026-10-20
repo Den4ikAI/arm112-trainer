@@ -2,6 +2,7 @@
 
 pub mod applicant;
 pub mod advice;
+pub mod dds_advice;
 pub mod brigade;
 pub mod chief;
 pub mod card_status;

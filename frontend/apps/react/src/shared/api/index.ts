@@ -387,6 +387,37 @@ export const advice = {
     api.get<{ efficacy: AdviceEfficacy; recent: CheckedAdvice[] }>(`/api/advice/group/${id}`),
 };
 
+/**
+ * Рекомендации диспетчеру ДДС: по замечаниям разбора закрытой карточки,
+ * проверяются следующей карточкой. По открытой рекомендации курсант
+ * берёт следующее задание от ИИ — без преподавателя.
+ */
+export interface DdsAdvice {
+  id: string;
+  text: string;
+  kind: import('./types').DdsFindingKind;
+  stage: string;
+  label: string;
+  occurrences: number;
+  windowSize: number;
+  madeAt: string;
+  /** Карточка, по разбору которой выдана */
+  sourceCardId: string;
+  /** Карточка, которой проверена; null — ещё не проверена */
+  checkCardId: string | null;
+  worked: boolean | null;
+  checkedAt: string | null;
+  /** Задание от ИИ, выданное для отработки этой рекомендации */
+  nextCardId: string | null;
+}
+
+export const ddsAdvice = {
+  mine: () => api.get<DdsAdvice[]>('/api/advice/dds/me'),
+  group: (id: string) =>
+    api.get<{ efficacy: AdviceEfficacy; recent: CheckedAdvice[] }>(`/api/advice/dds/group/${id}`),
+  next: (id: string) => api.post<import('./types').Practice>(`/api/advice/dds/${id}/next`),
+};
+
 /** Попытка внутри карточки: вызов 112 или работа службы ДДС. */
 export interface ReviewTarget {
   kind: 'card112' | 'dds';

@@ -25,7 +25,7 @@
 //! 112: значение, может, и верное, но не выясненное.
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Этапы работ бригады, по порядку. Это статусы реагирования из
 /// памятки ДДС, которые диспетчер ставит по докладам старшего.
@@ -143,7 +143,9 @@ pub struct Input {
 
 /// Имена с приставкой `Dds`: схемы OpenAPI различаются по имени типа,
 /// и одноимённые `Grade` и `Finding` затёрли бы разбор оператора 112.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+// Hash/Ord и Deserialize — для рекомендаций ДДС (domain::dds_advice):
+// вид замечания хранится в базе строкой в этом же написании
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum DdsFindingKind {
     /// Статус проставлен вовремя и после доклада
