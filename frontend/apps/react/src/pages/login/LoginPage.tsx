@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '@/entities/session/model';
 import { useStand } from '@/entities/stand/model';
-import type { DemoAccount } from '@/shared/api';
+import { ApiError, stand, type DemoAccount } from '@/shared/api';
 import s from './LoginPage.module.scss';
 
 /** Кто это и что у него смотреть — подпись учётной записи стенда. */
@@ -11,6 +11,77 @@ const роль = (a: DemoAccount): [string, string] => {
   if (a.role === 'admin') return ['Администратор', 'учётные записи, классификатор, параметры, журнал аудита'];
   if (a.duty === 'dds') return [`Диспетчер ДДС · ${a.service ?? ''}`, 'лента службы, статусы, бригада, тренировка с ИИ'];
   return ['Оператор 112', 'приём вызова и заполнение карточки 112'];
+};
+
+/**
+ * Включение системы 112 прямо с экрана входа.
+ *
+ * Заказчик (рекомендации финалистам, п. 5): функционал оператора 112
+ * скрыть или включать только через администратора. Поэтому переключатель
+ * спрашивает логин и пароль администратора, а право проверяет сервер:
+ * чужой учётной записью параметр не поменять.
+ */
+const Op112Switch = () => {
+  const op112 = useStand((st) => st.op112);
+  const reload = useStand((st) => st.load);
+  const [open, setOpen] = useState(false);
+  const [login, setLogin] = useState('admin');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await stand.setOp112(login, password, !op112);
+      await reload();
+      setOpen(false);
+      setPassword('');
+    } catch (err) {
+      const st = err instanceof ApiError ? err.status : 0;
+      setError(st === 401 ? 'Неверный логин или пароль'
+        : st === 403 ? 'Включать систему 112 может только администратор'
+          : 'Не удалось изменить, попробуйте ещё раз');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={s.sys} data-testid="op112-switch">
+      <div className={s.sysRow}>
+        <span>Система 112: <b className={op112 ? s.sysOn : s.sysOff} data-testid="op112-state">
+          {op112 ? 'включена' : 'выключена'}</b></span>
+        {!open && (
+          <button type="button" className={s.sysBtn} data-testid="op112-toggle"
+                  onClick={() => { setOpen(true); setError(null); }}>
+            {op112 ? 'Выключить' : 'Включить'}
+          </button>
+        )}
+      </div>
+      <p className={s.demoWhat}>
+        Приём вызовов оператором 112 и учебный материал для него. Тренажёр
+        по умолчанию — для диспетчеров ДДС; включает и выключает администратор.
+      </p>
+      {open && (
+        <form className={s.sysForm} onSubmit={(e) => void apply(e)} data-testid="op112-form">
+          <input value={login} onChange={(e) => setLogin(e.target.value)} aria-label="Логин администратора"
+                 placeholder="логин администратора" autoComplete="off" name="op112-login" />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                 aria-label="Пароль администратора" placeholder="пароль" autoComplete="off"
+                 name="op112-password" autoFocus />
+          <button type="submit" className={s.sysBtn} disabled={busy || !login || !password}
+                  data-testid="op112-apply">
+            {busy ? '…' : op112 ? 'Выключить 112' : 'Включить 112'}
+          </button>
+          <button type="button" className={s.sysCancel} onClick={() => setOpen(false)}>отмена</button>
+          {error && <div className={s.sysError} role="alert" data-testid="op112-error">{error}</div>}
+        </form>
+      )}
+    </div>
+  );
 };
 
 /**
@@ -24,7 +95,9 @@ const DemoAccess = ({ onPick, busy }: {
   onPick: (login: string, password: string) => void; busy: boolean;
 }) => {
   const demo = useStand((st) => st.demo);
-  if (!demo || demo.accounts.length === 0) return null;
+  if (!demo || demo.accounts.length === 0) {
+    return <section className={s.demo} aria-label="Система 112"><Op112Switch /></section>;
+  }
   return (
     <section className={s.demo} aria-label="Учебные учётные записи" data-testid="demo-access">
       <h2 className={s.demoTitle}>Учебный стенд — войти одним щелчком</h2>
@@ -47,6 +120,7 @@ const DemoAccess = ({ onPick, busy }: {
           );
         })}
       </ul>
+      <Op112Switch />
     </section>
   );
 };

@@ -97,4 +97,36 @@ test.describe('ДДС в центре', () => {
     await go(page, info, '/scenarios');
     await expect(page.getByTestId('tab-112')).toBeVisible();
   });
+
+  test('систему 112 включают с экрана входа — только паролем администратора', async ({ page }, info) => {
+    свернуть112(true);
+    await go(page, info, '/login');
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    const sw = page.getByTestId('op112-switch');
+    await expect(sw.getByTestId('op112-state')).toHaveText('выключена');
+    await expect(page.getByTestId(`demo-${USERS.operator}`)).toHaveCount(0);
+
+    await sw.getByTestId('op112-toggle').click();
+    // Преподаватель — не администратор: сервер не даст поменять параметр
+    await sw.getByLabel('Логин администратора').fill('teacher1');
+    await sw.getByLabel('Пароль администратора').fill('arm112');
+    await sw.getByTestId('op112-apply').click();
+    await expect(sw.getByTestId('op112-error')).toContainText('только администратор');
+    await expect(sw.getByTestId('op112-state')).toHaveText('выключена');
+
+    await sw.getByLabel('Логин администратора').fill('admin');
+    await sw.getByTestId('op112-apply').click();
+    await expect(sw.getByTestId('op112-state')).toHaveText('включена');
+    await expect(page.getByTestId(`demo-${USERS.operator}`)).toBeVisible();
+    expect(Number(sql(`SELECT value::text FROM settings WHERE key = 'ui.op112';`).trim())).toBe(1);
+
+    // Обратно — тем же переключателем
+    await sw.getByTestId('op112-toggle').click();
+    await sw.getByLabel('Пароль администратора').fill('arm112');
+    await sw.getByTestId('op112-apply').click();
+    await expect(sw.getByTestId('op112-state')).toHaveText('выключена');
+    await expect(page.getByTestId(`demo-${USERS.operator}`)).toHaveCount(0);
+  });
 });

@@ -103,6 +103,33 @@ export const ddsIncidents = {
 /** Сведения о стенде для экрана входа — до входа, без токена. */
 export const stand = {
   get: () => api.get<import('./types').Stand>('/api/stand'),
+  /**
+   * Включить или свернуть систему 112 с экрана входа. Решает
+   * администратор: вход его учётной записью, тот же параметр `ui.op112`,
+   * что во вкладке «Параметры», и сразу выход. Своим токеном не
+   * пользуемся — на экране входа его нет, а чужой сеанс не подменяем.
+   */
+  setOp112: async (login: string, password: string, on: boolean) => {
+    const call = async <T,>(path: string, method: string, body?: unknown, token?: string) => {
+      const res = await fetch(path, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      if (!res.ok) {
+        let data: { error?: string; detail?: string } | null = null;
+        try { data = await res.json(); } catch { /* тело не JSON */ }
+        throw new ClientError(res.status, data?.error ?? 'unknown', data?.detail);
+      }
+      return (res.status === 204 ? null : await res.json()) as T;
+    };
+    const { token } = await call<{ token: string }>('/api/auth/login', 'POST', { login, password });
+    try {
+      await call('/api/settings/ui.op112', 'PATCH', { value: on ? 1 : 0 }, token);
+    } finally {
+      await call('/api/auth/logout', 'POST', undefined, token).catch(() => undefined);
+    }
+  },
 };
 
 /**
