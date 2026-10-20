@@ -932,6 +932,15 @@ async fn practice(
     State(state): State<AppState>,
     user: AuthUser,
 ) -> AppResult<(StatusCode, Json<Practice>)> {
+    Ok((StatusCode::CREATED, Json(practice_for(&state, &user).await?)))
+}
+
+/// Собрать происшествие от ИИ и выдать его курсанту личным занятием.
+///
+/// Общее для кнопки «Новое происшествие от ИИ» и для «Следующего задания
+/// от ИИ» по рекомендации (api::dds_advice): задание то же, разница —
+/// в отметке, какую рекомендацию оно отрабатывает.
+pub async fn practice_for(state: &AppState, user: &AuthUser) -> AppResult<Practice> {
     // Самостоятельная тренировка — для курсанта-диспетчера: преподаватель
     // собирает происшествия в «Учебном материале»
     user.require(&[Role::Student])?;
@@ -959,8 +968,8 @@ async fn practice(
     }
     let _готовится = Готовится(user.id);
 
-    let (input, notes) = generated_input(&state, &service).await?;
-    let id = insert_blank(&state.db, &user, "ai").await?;
+    let (input, notes) = generated_input(state, &service).await?;
+    let id = insert_blank(&state.db, user, "ai").await?;
     write(&state.db, id, &input).await?;
 
     // Автор учебного происшествия — преподаватель группы, как у выданных
@@ -1008,11 +1017,11 @@ async fn practice(
 
     audit::log(
         &state.db,
-        audit::Event::new("incident.practice").from_user(&user).about("card", id)
+        audit::Event::new("incident.practice").from_user(user).about("card", id)
             .with(json!({ "service": service, "lesson": lesson_id, "notes": notes })),
     )
     .await;
-    Ok((StatusCode::CREATED, Json(Practice { card_id: id, number, lesson_id })))
+    Ok(Practice { card_id: id, number, lesson_id })
 }
 
 #[cfg(test)]

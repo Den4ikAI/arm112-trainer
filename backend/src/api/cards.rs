@@ -507,6 +507,13 @@ async fn add_response(
         {
             tracing::warn!(card = %id, error = %e, "анализ комментариев не поставлен в очередь");
         }
+        // Рекомендации диспетчеру: вердикт по прежним и новые по этой
+        // карточке. Надстройка — без неё статус проставляется как обычно
+        if user.role == Role::Student {
+            if let Err(e) = crate::reports::dds_advice::after_close(&state.db, user.id).await {
+                tracing::warn!(card = %id, error = %e, "рекомендации ДДС не обновлены");
+            }
+        }
     }
 
     // Другие диспетчеры той же карточки и преподаватель видят
