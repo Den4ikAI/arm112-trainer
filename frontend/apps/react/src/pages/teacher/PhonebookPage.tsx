@@ -107,7 +107,13 @@ export const PhonebookPage = () => {
           <label className={s.cardTitle}>
             Служба{' '}
             <select value={serviceId} data-testid="phonebook-service"
-                    onChange={(e) => { setChosen(e.target.value); setBook(null); }}>
+                    onChange={(e) => {
+                      // Та же служба — справочник уже загружен; сброс без новой
+                      // загрузки оставил бы «Загрузка…» навсегда
+                      if (e.target.value === serviceId) return;
+                      setChosen(e.target.value);
+                      setBook(null);
+                    }}>
               {services.map((sv) => <option key={sv.id} value={sv.id}>{sv.title}</option>)}
             </select>
           </label>
