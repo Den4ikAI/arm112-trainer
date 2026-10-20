@@ -14,6 +14,10 @@ import { go, login, sql, USERS } from './helpers';
  *
  * Шкала бригады на время сценария сжата до 5 с на этап, входящий звонит
  * 5 с: иначе доклада старшего ждать минуту.
+ *
+ * Рекомендация заказчика (п. 8): телефон спрятан за зелёным кружком
+ * с трубкой на рабочей панели; открывается по нажатию, входящий
+ * открывает его сам и подсвечивает кружок.
  */
 
 const ПАРАМЕТРЫ = ['ui.phone', 'brigade.start_sec', 'brigade.arrive_sec', 'brigade.work_start_sec',
@@ -59,7 +63,13 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(page).toHaveURL(/#\/card-dds\//, { timeout: 30_000 });
     карточка = page.url().split('/').pop()!;
 
+    // Телефон спрятан за зелёным кружком: сначала кружок, телефона не видно
+    const кружок = page.getByTestId('phone-launcher');
+    await expect(кружок).toBeVisible();
+    await expect(кружок).toHaveAttribute('data-ringing', 'false');
     const tel = page.getByTestId('ip-phone');
+    await expect(tel).toBeHidden();
+    await кружок.click();
     await expect(tel).toBeVisible();
     await expect(page.getByTestId('phone-status')).toContainText('доступен');
     await expect(page.getByTestId('phone-extension')).toContainText(/доб\. \d{4}/);
@@ -78,6 +88,15 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await page.getByTestId('phone-send').click();
     await expect(реплики).toHaveCount(3, { timeout: 15_000 });
 
+    // Окно убрали крестиком посреди разговора — трубка не положена:
+    // открыли кружком снова, секундомер идёт
+    await page.getByTestId('phone-close').click();
+    await expect(tel).toBeHidden();
+    await кружок.click();
+    await expect(page.getByTestId('phone-timer')).toBeVisible();
+    await expect(page.getByTestId('phone-status')).toContainText('разговор');
+    await expect(реплики).toHaveCount(3);
+
     await page.getByTestId('phone-hangup').click();
     await expect(page.getByTestId('phone-status')).toContainText('доступен');
     // Положили трубку — начальник разбирает доклад
@@ -91,6 +110,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
   test('старшему бригады звонят сами, и он звонит с докладом — входящий с АОН', async ({ page }, info) => {
     await login(page, info, USERS.mchs);
     await go(page, info, `/card-dds/${карточка}`);
+    await page.getByTestId('phone-launcher').click();
     await expect(page.getByTestId('ip-phone')).toBeVisible();
     // Бригады ещё нет — звонить некому
     await expect(page.getByTestId('phone-call-brigade')).toBeDisabled();
@@ -101,11 +121,16 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(page.getByTestId('brigade-via-phone')).toBeVisible();
     await expect(page.getByTestId('brigade-call')).toHaveCount(0);
 
-    // Входящий: старший докладывает о начале работ сам
-    await expect(page.getByTestId('phone-accept')).toBeVisible({ timeout: 30_000 });
+    // Входящий: старший докладывает о начале работ сам. После перезагрузки
+    // телефон закрыт — кружок подсвечивается, окно открывается само
+    const кружок = page.getByTestId('phone-launcher');
+    await expect(кружок).toHaveAttribute('data-ringing', 'true', { timeout: 30_000 });
+    await expect(page.getByTestId('phone-launcher-badge')).toContainText('входящий');
+    await expect(page.getByTestId('phone-accept')).toBeVisible();
     await expect(page.getByTestId('phone-display')).toContainText('АОН');
     await expect(page.getByTestId('phone-display')).toContainText('Старший бригады № 1');
     await page.getByTestId('phone-accept').click();
+    await expect(кружок).toHaveAttribute('data-ringing', 'false');
     await expect(page.getByTestId('phone-timer')).toBeVisible();
     await expect(page.getByTestId('phone-lines')).toContainText(/выехали|прибыли|приступили/);
     await page.getByTestId('phone-hangup').click();
@@ -132,6 +157,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
   test('незнакомый номер не обслуживается', async ({ page }, info) => {
     await login(page, info, USERS.mchs);
     await go(page, info, `/card-dds/${карточка}`);
+    await page.getByTestId('phone-launcher').click();
     await page.getByTestId('phone-dial').fill('1234');
     await page.getByTestId('phone-dial-go').click();
     await expect(page.getByTestId('ip-phone').getByRole('alert')).toContainText('не обслуживается');
@@ -148,6 +174,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(журнал).toContainText('Вышестоящий начальник');
     // Сам преподаватель на линии не сидит
     await expect(page.getByTestId('ip-phone')).toHaveCount(0);
+    await expect(page.getByTestId('phone-launcher')).toHaveCount(0);
   });
 
   test('администратор выключает телефон — звонки снова кнопками в панелях', async ({ page }, info) => {
@@ -163,6 +190,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await go(page, info, `/card-dds/${карточка}`);
     await expect(page.getByTestId('brigade-panel')).toBeVisible();
     await expect(page.getByTestId('ip-phone')).toHaveCount(0);
+    await expect(page.getByTestId('phone-launcher')).toHaveCount(0);
     await expect(page.getByTestId('brigade-call')).toBeVisible();
   });
 });

@@ -26,6 +26,9 @@ interface Props {
   /** Разговор что-то поменял: доклад бригады получен, начальник принял
    *  доклад — панели карточки перечитываются. */
   onActivity: () => void;
+  /** Входящий зазвонил или перестал: кружок телефона на панели
+   *  пульсирует и открывает окно телефона сам. */
+  onRingingChange?: (ringing: boolean) => void;
 }
 
 interface Said {
@@ -64,7 +67,7 @@ const errorText = (e: unknown, fallback: string) =>
  * Разговор пишется в журнал вызовов, голос диспетчера — в запись,
  * которую потом слушает преподаватель.
  */
-export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity }: Props) => {
+export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity, onRingingChange }: Props) => {
   const config = usePhone((st) => st.config);
   // Обработчики событий и таймеров живут дольше одной отрисовки
   const cfg = useRef(config);
@@ -86,10 +89,17 @@ export const IpPhone = ({ cardId, serviceId, closed, stamp, onActivity }: Props)
   // Состояние вызова нужно и обработчикам, созданным раньше: события
   // сервера, таймеры звонка. Держим копию в ref
   const liveRef = useRef<Live | null>(null);
+  // Наружу — только факт «звонит входящий»; колбэк из ref, он нужен
+  // обработчикам, созданным раньше
+  const ringingCb = useRef(onRingingChange);
+  useEffect(() => { ringingCb.current = onRingingChange; });
   const setLive = (next: Live | null | ((prev: Live | null) => Live | null)) => {
     const value = typeof next === 'function' ? next(liveRef.current) : next;
+    const rang = liveRef.current?.state === 'ringing';
     liveRef.current = value;
     setLiveState(value);
+    const rings = value?.state === 'ringing';
+    if (rang !== rings) ringingCb.current?.(rings);
   };
   const tone = useRef<(() => void) | null>(null);
   const timer = useRef<number | null>(null);

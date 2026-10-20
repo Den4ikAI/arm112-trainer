@@ -10,6 +10,7 @@ import { CardHeader } from '@/widgets/card-header/CardHeader';
 import { ChiefReport } from '@/widgets/chief-report/ChiefReport';
 import { IpPhone } from '@/widgets/ip-phone/IpPhone';
 import { PhoneJournal } from '@/widgets/ip-phone/PhoneJournal';
+import { PhoneLauncher } from '@/widgets/phone-launcher/PhoneLauncher';
 import { usePhone } from '@/entities/phone/model';
 import { ServiceTab } from '@/widgets/status-history/ServiceTab';
 import { SurveySummary } from '@/widgets/survey-card/SurveyCardView';
@@ -38,6 +39,8 @@ export const CardDdsPage = () => {
   // Разговор по телефону меняет панели карточки: доклад бригады,
   // разбор доклада начальнику
   const [phoneTick, setPhoneTick] = useState(0);
+  // Звонит входящий — кружок телефона на панели пульсирует
+  const [ringing, setRinging] = useState(false);
 
   // Параметры телефонии — при каждом открытии: администратор мог
   // включить или выключить телефон
@@ -176,10 +179,6 @@ export const CardDdsPage = () => {
         </div>
 
         <div className={s.right}>
-          {viaPhone && dispatcher && (
-            <IpPhone cardId={card.id} serviceId={own} closed={closed} stamp={card} onActivity={onPhone} />
-          )}
-
           <div className={s.flagsRow}>
             <span>Пострадавшие: {card.victims == null ? 'нет' : card.victims}</span>
             <span>Нет контакта: {card.noContact ? 'да' : 'нет'}</span>
@@ -241,6 +240,15 @@ export const CardDdsPage = () => {
           </button>
         </div>
       </footer>
+
+      {/* Виртуальный IP-телефон — зелёный кружок в углу рабочей панели
+          (рекомендация заказчика, п. 8); сам телефон открывается окном поверх */}
+      {viaPhone && dispatcher && (
+        <PhoneLauncher ringing={ringing}>
+          <IpPhone cardId={card.id} serviceId={own} closed={closed} stamp={card}
+                   onActivity={onPhone} onRingingChange={setRinging} />
+        </PhoneLauncher>
+      )}
     </div>
   );
 };
