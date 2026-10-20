@@ -16,6 +16,9 @@ import { go, login, sql, USERS } from './helpers';
  * 5 с: иначе доклада старшего ждать минуту.
  */
 
+/** Телефонный справочник службы — его на время прогона правит преподаватель. */
+const СЛУЖБА = 'mchs';
+
 const ПАРАМЕТРЫ = ['ui.phone', 'brigade.start_sec', 'brigade.arrive_sec', 'brigade.work_start_sec',
   'brigade.report_delay_sec', 'phone.ring_sec', 'phone.answer_sec'];
 let было: Record<string, string> = {};
@@ -51,6 +54,8 @@ test.describe('IP-телефон диспетчера ДДС', () => {
   });
   test.afterAll(() => {
     for (const [k, v] of Object.entries(было)) if (v) поставить(k, v);
+    // Справочник по умолчанию — те же номера, что раздала миграция
+    sql(`DELETE FROM phone_book WHERE service_id = '${СЛУЖБА}';`);
   });
 
   test('диспетчер звонит начальнику по телефону и докладывает', async ({ page }, info) => {
@@ -67,8 +72,8 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(page.getByTestId('chief-via-phone')).toBeVisible();
     await expect(page.getByTestId('chief-start')).toHaveCount(0);
 
-    await page.getByTestId('phone-call-chief').click();
-    await expect(page.getByTestId('phone-display')).toContainText('Вышестоящий начальник');
+    await page.getByTestId('phone-call-response_head').click();
+    await expect(page.getByTestId('phone-display')).toContainText('Начальник отдела реагирования');
     await expect(page.getByTestId('phone-timer')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('phone-status')).toContainText('разговор');
     const реплики = page.getByTestId('phone-lines').locator('li');
@@ -93,7 +98,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await go(page, info, `/card-dds/${карточка}`);
     await expect(page.getByTestId('ip-phone')).toBeVisible();
     // Бригады ещё нет — звонить некому
-    await expect(page.getByTestId('phone-call-brigade')).toBeDisabled();
+    await expect(page.getByTestId('phone-call-brigade_head')).toBeDisabled();
 
     expect(await принять(page, карточка)).toBe(201);
     await page.reload();
@@ -104,7 +109,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     // Входящий: старший докладывает о начале работ сам
     await expect(page.getByTestId('phone-accept')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('phone-display')).toContainText('АОН');
-    await expect(page.getByTestId('phone-display')).toContainText('Старший бригады № 1');
+    await expect(page.getByTestId('phone-display')).toContainText('Начальник аварийной бригады № 1');
     await page.getByTestId('phone-accept').click();
     await expect(page.getByTestId('phone-timer')).toBeVisible();
     await expect(page.getByTestId('phone-lines')).toContainText(/выехали|прибыли|приступили/);
@@ -112,7 +117,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
 
     // Исходящий: диспетчер набирает старшего по номеру из книги
     await page.getByTestId('phone-tab-book').click();
-    const номер = (await page.getByTestId('phone-call-brigade').getAttribute('title'))!.replace(/\D/g, '');
+    const номер = (await page.getByTestId('phone-call-brigade_head').getAttribute('title'))!.replace(/\D/g, '');
     await page.getByTestId('phone-dial').fill(номер);
     await page.getByTestId('phone-dial-go').click();
     await expect(page.getByTestId('phone-timer')).toBeVisible({ timeout: 10_000 });
@@ -126,7 +131,7 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await page.getByTestId('phone-tab-log').click();
     const исходы = page.getByTestId('phone-log-outcome');
     await expect(исходы.first()).toHaveText('пропущен');
-    await expect(page.getByTestId('phone-log')).toContainText('Старший бригады № 1');
+    await expect(page.getByTestId('phone-log')).toContainText('Начальник аварийной бригады № 1');
   });
 
   test('незнакомый номер не обслуживается', async ({ page }, info) => {
@@ -138,6 +143,68 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(page.getByTestId('phone-display')).toHaveCount(0);
   });
 
+  test('преподаватель формирует справочник: имя руководителя и номер заявителя', async ({ page }, info) => {
+    await login(page, info, 'teacher1');
+    await page.getByTestId('phonebook-link').click();
+    await expect(page).toHaveURL(/#\/phonebook/);
+    await page.getByTestId('phonebook-service').selectOption(СЛУЖБА);
+    await expect(page.getByTestId('phonebook-default')).toBeVisible();
+    const строки = page.getByTestId('phonebook-row');
+    await expect(строки).toHaveCount(4);
+
+    // Руководителя подписывают по фамилии, заявителя включают в перечень
+    const руководитель = строки.nth(3);
+    await expect(руководитель.getByTestId('phonebook-role')).toHaveValue('org_head');
+    await руководитель.getByTestId('phonebook-title').fill('Руководитель организации Петров');
+    await page.getByTestId('phonebook-add-applicant').click();
+    await expect(строки).toHaveCount(5);
+    await expect(page.getByTestId('phonebook-add-applicant')).toBeDisabled();
+    await page.getByTestId('phonebook-save').click();
+    await expect(page.getByTestId('phonebook-note')).toContainText('Сохранено');
+    await expect(page.getByTestId('phonebook-default')).toHaveCount(0);
+
+    // Больше десяти не добавить
+    for (let i = 5; i < 10; i += 1) await page.getByTestId('phonebook-add').click();
+    await expect(строки).toHaveCount(10);
+    await expect(page.getByTestId('phonebook-add')).toBeDisabled();
+  });
+
+  test('диспетчер звонит руководителю организации и заявителю по номеру из карточки', async ({ page }, info) => {
+    // Номер заявителя — в карточке, как при приёме вызова в 112
+    sql(`UPDATE cards SET phone_aon = '+7 (916) 000-00-01', applicant_name = 'Смирнова Анна Ильинична'
+          WHERE id = '${карточка}';`);
+    await login(page, info, USERS.mchs);
+    await go(page, info, `/card-dds/${карточка}`);
+    await expect(page.getByTestId('ip-phone')).toBeVisible();
+
+    await page.getByTestId('phone-call-org_head').click();
+    await expect(page.getByTestId('phone-display')).toContainText('Руководитель организации Петров');
+    await expect(page.getByTestId('phone-timer')).toBeVisible({ timeout: 10_000 });
+    const реплики = page.getByTestId('phone-lines').locator('li');
+    await expect(реплики.first()).toContainText('слушает');
+    await page.getByTestId('phone-text').fill('Докладываю: бригада на месте');
+    await page.getByTestId('phone-send').click();
+    await expect(реплики).toHaveCount(3, { timeout: 15_000 });
+    await page.getByTestId('phone-hangup').click();
+    await expect(page.getByTestId('phone-status')).toContainText('доступен');
+
+    // Заявитель: набор номера из карточки
+    await expect(page.getByTestId('phone-call-applicant')).toBeEnabled();
+    await page.getByTestId('phone-dial').fill('79160000001');
+    await page.getByTestId('phone-dial-go').click();
+    await expect(page.getByTestId('phone-display')).toContainText('Смирнова Анна Ильинична');
+    await expect(page.getByTestId('phone-timer')).toBeVisible({ timeout: 10_000 });
+    await expect(реплики.first()).toContainText('звонила в 112');
+    await page.getByTestId('phone-text').fill('Бригада выехала, ждите');
+    await page.getByTestId('phone-send').click();
+    await expect(реплики).toHaveCount(3, { timeout: 15_000 });
+    await page.getByTestId('phone-hangup').click();
+
+    await page.getByTestId('phone-tab-log').click();
+    await expect(page.getByTestId('phone-log')).toContainText('Руководитель организации Петров');
+    await expect(page.getByTestId('phone-log')).toContainText('+7 (916) 000-00-01');
+  });
+
   test('преподаватель видит журнал вызовов диспетчера', async ({ page }, info) => {
     await login(page, info, 'teacher1');
     await go(page, info, `/card-dds/${карточка}`);
@@ -145,7 +212,8 @@ test.describe('IP-телефон диспетчера ДДС', () => {
     await expect(журнал).toBeVisible();
     await expect(журнал.getByTestId('phone-log-row').first()).toBeVisible();
     await expect(журнал).toContainText('Диспетчер:');
-    await expect(журнал).toContainText('Вышестоящий начальник');
+    await expect(журнал).toContainText('Начальник отдела реагирования');
+    await expect(журнал).toContainText('Руководитель организации Петров');
     // Сам преподаватель на линии не сидит
     await expect(page.getByTestId('ip-phone')).toHaveCount(0);
   });
